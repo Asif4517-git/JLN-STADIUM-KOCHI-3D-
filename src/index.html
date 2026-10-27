@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<meta name="theme-color" content="#0a0e12" />
+<title>Kaloor · Jawaharlal Nehru Stadium, Kochi — 3D Drone Simulation</title>
+<style>
+  :root{
+    --bg:#080b0f;
+    --panel:rgba(12,17,22,.72);
+    --panel-2:rgba(18,24,30,.86);
+    --line:rgba(255,255,255,.13);
+    --line-2:rgba(255,255,255,.07);
+    --ink:#eef2f4;
+    --muted:#93a1a9;
+    --yellow:#ffd21f;
+    --yellow-dim:#b9930f;
+    --green:#2fbf6e;
+    --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);font-family:var(--font);}
+  body.grabbing{cursor:grabbing;}
+  #view{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:none;}
+  #vignette{
+    position:fixed;inset:0;pointer-events:none;z-index:3;
+    background:
+      radial-gradient(120% 90% at 50% 46%, rgba(0,0,0,0) 52%, rgba(3,6,9,.42) 100%),
+      linear-gradient(180deg, rgba(3,6,9,.30) 0%, rgba(0,0,0,0) 18%, rgba(0,0,0,0) 74%, rgba(3,6,9,.5) 100%);
+  }
+  body.nohud #vignette{opacity:.5;}
+  #vignette{transition:opacity .4s;}
+  #ui{position:fixed;inset:0;pointer-events:none;z-index:5;display:flex;flex-direction:column;}
+  #ui button, #ui input, #ui a, .clickable{pointer-events:auto;}
+
+  /* ---------------- top bar ---------------- */
+  .topbar{
+    display:flex;align-items:flex-start;justify-content:space-between;gap:18px;
+    padding:18px 22px 0;flex-wrap:wrap;
+  }
+  .brand{display:flex;gap:13px;align-items:center;min-width:0;
+    filter:drop-shadow(0 2px 14px rgba(0,0,0,.55));}
+  .crest{
+    width:44px;height:44px;flex:0 0 auto;border-radius:11px;
+    background:linear-gradient(160deg,#1a2027,#0b0f13);
+    border:1px solid var(--line);display:grid;place-items:center;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
+  }
+  .brand h1{
+    margin:0;font-size:15px;letter-spacing:.20em;font-weight:700;line-height:1.15;
+    text-transform:uppercase;
+  }
+  .brand p{
+    margin:5px 0 0;font-size:9.5px;letter-spacing:.26em;color:var(--muted);text-transform:uppercase;
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  }
+  .live{display:inline-flex;align-items:center;gap:5px;color:var(--yellow);}
+  .live i{width:5px;height:5px;border-radius:50%;background:var(--yellow);box-shadow:0 0 8px var(--yellow);animation:pulse 1.8s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+
+  nav.modes{display:flex;gap:6px;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:5px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);}
+  nav.modes button{
+    appearance:none;border:0;background:transparent;color:var(--muted);font-family:var(--font);
+    font-size:10px;font-weight:700;letter-spacing:.18em;padding:9px 15px;border-radius:8px;cursor:pointer;
+    transition:background .18s,color .18s,box-shadow .18s;text-transform:uppercase;
+  }
+  nav.modes button:hover{color:var(--ink);background:rgba(255,255,255,.05);}
+  nav.modes button.on{background:var(--yellow);color:#101418;box-shadow:0 2px 16px rgba(255,210,31,.25);}
+
+  /* ---------------- compass ---------------- */
+  #compass{
+    position:absolute;top:14px;left:50%;transform:translateX(-50%);
+    width:min(360px,42vw);height:34px;overflow:hidden;
+    -webkit-mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent);
+    mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent);
+    opacity:.9;
+  }
+  #compass canvas{width:100%;height:100%;display:block;}
+
+  /* ---------------- telemetry ---------------- */
+  #telemetry{
+    position:absolute;left:22px;top:50%;transform:translateY(-50%);
+    display:flex;flex-direction:column;gap:9px;
+  }
+  .tele{
+    background:var(--panel);border:1px solid var(--line-2);border-radius:10px;
+    padding:8px 11px;min-width:104px;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  }
+  .tele .k{font-size:8.5px;letter-spacing:.24em;color:var(--muted);text-transform:uppercase;}
+  .tele .v{font-family:var(--mono);font-size:16px;font-weight:600;letter-spacing:.02em;margin-top:3px;}
+  .tele .v small{font-size:9px;color:var(--muted);letter-spacing:.1em;margin-left:2px;}
+  .tele .bar{height:2px;background:rgba(255,255,255,.1);margin-top:7px;border-radius:2px;overflow:hidden;}
+  .tele .bar i{display:block;height:100%;background:var(--yellow);width:0%;transition:width .12s linear;}
+
+  /* ---------------- minimap ---------------- */
+  #mapPanel{
+    position:absolute;right:22px;top:50%;transform:translateY(-50%);
+    background:var(--panel);border:1px solid var(--line-2);border-radius:12px;padding:10px;
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  }
+  #mapPanel canvas{display:block;width:186px;height:140px;border-radius:6px;}
+  .maprow{display:flex;justify-content:space-between;align-items:center;margin-top:8px;}
+  .maprow b{font-size:8.5px;letter-spacing:.22em;color:var(--muted);font-weight:600;}
+  #mapCoord{font-family:var(--mono);font-size:9px;color:var(--yellow);}
+
+  /* ---------------- dock ---------------- */
+  #dock{
+    margin-top:auto;display:flex;gap:14px;align-items:stretch;flex-wrap:wrap;
+    padding:14px 18px 16px;background:linear-gradient(0deg,rgba(5,8,11,.92),rgba(5,8,11,.55) 62%,transparent);
+  }
+  .group{
+    background:var(--panel);border:1px solid var(--line-2);border-radius:12px;
+    padding:10px 13px;display:flex;align-items:center;gap:13px;
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  }
+  .group > label{
+    font-size:8.5px;letter-spacing:.24em;color:var(--muted);text-transform:uppercase;white-space:nowrap;
+  }
+  .time{flex:1 1 380px;min-width:300px;}
+  #timeSlider{
+    -webkit-appearance:none;appearance:none;flex:1;height:3px;border-radius:3px;outline:none;cursor:pointer;
+    background:linear-gradient(90deg,#7cc0e8,#ffd9a0 46%,#ff9a5c 62%,#1a2b46 76%,#05080f);
+  }
+  #timeSlider::-webkit-slider-thumb{
+    -webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#fff;
+    border:3px solid var(--yellow);box-shadow:0 0 12px rgba(255,210,31,.6);cursor:grab;
+  }
+  #timeSlider::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#fff;border:3px solid var(--yellow);}
+  #timeLabel{font-family:var(--mono);font-size:13px;letter-spacing:.08em;min-width:56px;text-align:center;color:var(--yellow);}
+  .presets{display:flex;gap:4px;}
+  .presets button{
+    appearance:none;border:1px solid var(--line-2);background:rgba(255,255,255,.04);color:var(--muted);
+    font-family:var(--font);font-size:8.5px;letter-spacing:.16em;font-weight:700;padding:6px 8px;border-radius:6px;cursor:pointer;
+    transition:.16s;
+  }
+  .presets button:hover{color:var(--ink);background:rgba(255,255,255,.09);}
+  .presets button.on{color:#101418;background:var(--yellow);border-color:var(--yellow);}
+
+  .toggles{display:flex;gap:6px;flex-wrap:wrap;padding:8px;}
+  .tgl{
+    appearance:none;border:1px solid var(--line-2);background:rgba(255,255,255,.03);color:var(--muted);
+    font-family:var(--font);font-size:9px;letter-spacing:.15em;font-weight:700;padding:8px 10px;border-radius:7px;
+    cursor:pointer;transition:.16s;display:flex;align-items:center;gap:6px;text-transform:uppercase;
+  }
+  .tgl:hover{color:var(--ink);background:rgba(255,255,255,.08);}
+  .tgl.on{color:var(--yellow);border-color:rgba(255,210,31,.45);background:rgba(255,210,31,.09);}
+  .tgl .led{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.4;}
+  .tgl.on .led{opacity:1;box-shadow:0 0 7px currentColor;}
+
+  .topright{display:flex;flex-direction:column;align-items:flex-end;gap:8px;}
+  #viewPanel{
+    background:var(--panel);border:1px solid var(--line-2);border-radius:11px;padding:8px 9px;
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);display:flex;gap:9px;align-items:center;
+  }
+  .vp-title{font-size:8px;letter-spacing:.24em;color:var(--muted);text-transform:uppercase;}
+  .vbtn-row{display:flex;gap:4px;flex-wrap:wrap;}
+  .vbtn-row button{
+    appearance:none;border:1px solid var(--line-2);background:rgba(255,255,255,.04);color:var(--muted);
+    font-family:var(--font);font-size:8.5px;letter-spacing:.14em;font-weight:700;padding:6px 8px;border-radius:6px;cursor:pointer;
+    transition:.16s;text-transform:uppercase;
+  }
+  .vbtn-row button:hover{color:var(--ink);background:rgba(255,255,255,.09);border-color:var(--line);}
+  .actions{display:flex;gap:6px;padding:8px;}
+  .act{
+    appearance:none;width:36px;height:36px;border-radius:8px;border:1px solid var(--line-2);
+    background:rgba(255,255,255,.03);color:var(--muted);display:grid;place-items:center;cursor:pointer;transition:.16s;
+  }
+  .act:hover{color:var(--ink);background:rgba(255,255,255,.09);border-color:var(--line);}
+  .act svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;}
+
+  /* ---------------- hints / toast ---------------- */
+  #hint{
+    position:absolute;bottom:98px;left:50%;transform:translateX(-50%);
+    font-size:9.5px;letter-spacing:.18em;color:rgba(255,255,255,.72);text-transform:uppercase;
+    text-align:center;white-space:nowrap;display:flex;gap:6px;align-items:center;flex-wrap:wrap;
+    justify-content:center;max-width:94vw;
+  }
+  #hint b{
+    color:#101418;background:var(--yellow);font-weight:800;border-radius:4px;padding:3px 6px;
+    letter-spacing:.1em;box-shadow:0 2px 10px rgba(255,210,31,.18);
+  }
+  #hint span{color:rgba(255,255,255,.6);}
+  #toast{
+    position:absolute;bottom:128px;left:50%;transform:translate(-50%,10px);
+    background:rgba(10,14,18,.9);border:1px solid var(--line);border-left:2px solid var(--yellow);
+    padding:10px 16px;border-radius:8px;font-size:9.5px;letter-spacing:.16em;color:var(--ink);
+    text-transform:uppercase;opacity:0;transition:opacity .3s,transform .3s;pointer-events:none;max-width:80vw;text-align:center;
+  }
+  #toast.show{opacity:1;transform:translate(-50%,0);}
+  #shotLabel{
+    position:absolute;left:50%;bottom:42%;transform:translateX(-50%);
+    font-size:11px;letter-spacing:.42em;color:rgba(255,255,255,.75);text-transform:uppercase;
+    opacity:0;transition:opacity .4s;text-shadow:0 2px 18px rgba(0,0,0,.85);white-space:nowrap;
+  }
+  #shotLabel.show{opacity:1;}
+
+  /* ---------------- loader ---------------- */
+  #infoPanel{
+    position:absolute;right:22px;top:120px;width:min(380px,88vw);max-height:min(70vh,560px);overflow:auto;
+    background:rgba(10,14,18,.94);border:1px solid var(--line);border-radius:14px;padding:20px 22px 18px;
+    backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);z-index:20;pointer-events:auto;
+    box-shadow:0 24px 60px rgba(0,0,0,.55);transition:opacity .25s, transform .25s;
+  }
+  #infoPanel.hidden{opacity:0;transform:translateY(-8px);pointer-events:none;}
+  #infoPanel h3{margin:0 0 10px;font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--yellow);font-weight:800;}
+  #infoPanel h4{margin:16px 0 6px;font-size:9px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);font-weight:700;}
+  #infoPanel p{margin:0;font-size:11.5px;line-height:1.65;color:#cfd8dd;}
+  #infoPanel ul{margin:0;padding-left:16px;}
+  #infoPanel li{font-size:11px;line-height:1.6;color:#c3cdd3;margin-bottom:4px;}
+  #infoPanel b{color:#fff;font-weight:700;}
+  #infoPanel .small{font-size:10.5px;color:#9fadb5;}
+  #infoClose{
+    position:absolute;top:12px;right:12px;width:26px;height:26px;border-radius:7px;border:1px solid var(--line-2);
+    background:rgba(255,255,255,.05);color:var(--muted);cursor:pointer;font-size:12px;line-height:1;
+  }
+  #infoClose:hover{color:#fff;background:rgba(255,255,255,.12);}
+
+  #loader{
+    position:fixed;inset:0;z-index:50;background:
+      radial-gradient(1200px 600px at 50% 42%, #16202a 0%, #0a0e13 55%, #05070a 100%);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;
+    transition:opacity .9s ease, visibility .9s;pointer-events:auto;
+  }
+  #loader.hide{opacity:0;visibility:hidden;}
+  .loadmark{width:78px;height:78px;position:relative;display:grid;place-items:center;}
+  .loadmark .ring{
+    position:absolute;inset:0;border-radius:50%;border:1px solid rgba(255,210,31,.25);
+    border-top-color:var(--yellow);animation:spin 1.6s linear infinite;
+  }
+  .loadmark .ring:nth-child(2){inset:10px;border-top-color:transparent;border-right-color:rgba(255,210,31,.55);animation-duration:2.4s;animation-direction:reverse;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .loadmark span{font-family:var(--mono);font-size:11px;color:var(--yellow);letter-spacing:.1em;}
+  #loader h2{
+    margin:0;font-size:clamp(17px,3.4vw,27px);letter-spacing:.30em;text-transform:uppercase;font-weight:700;text-align:center;
+  }
+  #loader .sub{font-size:9px;letter-spacing:.35em;color:var(--muted);text-transform:uppercase;margin-top:-12px;}
+  .loadbar{width:min(340px,68vw);height:2px;background:rgba(255,255,255,.1);border-radius:2px;overflow:hidden;}
+  .loadbar i{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--yellow-dim),var(--yellow));
+    box-shadow:0 0 12px rgba(255,210,31,.7);transition:width .35s ease;}
+  #loadStep{font-size:8.5px;letter-spacing:.24em;color:var(--muted);text-transform:uppercase;height:12px;}
+
+  /* ---------------- touch pad ---------------- */
+  #touchpad{position:absolute;right:16px;bottom:110px;display:none;grid-template-columns:repeat(3,46px);
+    grid-template-rows:repeat(3,46px);gap:6px;pointer-events:auto;}
+  #touchpad button{
+    border-radius:10px;border:1px solid var(--line);background:rgba(12,17,22,.72);color:var(--ink);
+    font-size:16px;display:grid;place-items:center;backdrop-filter:blur(10px);
+  }
+  #touchpad button:active{background:rgba(255,210,31,.3);}
+  .tpad-up{grid-column:2;grid-row:1}.tpad-down{grid-column:2;grid-row:3}
+  .tpad-left{grid-column:1;grid-row:2}.tpad-right{grid-column:3;grid-row:2}
+  .tpad-rise{grid-column:3;grid-row:1}.tpad-sink{grid-column:1;grid-row:3}
+  body.touch #touchpad{display:grid;}
+
+  /* ---------------- hidden UI ---------------- */
+  body.nohud #ui > *:not(#toast):not(#loader){opacity:0;pointer-events:none;transition:opacity .4s;}
+  body.nohud #ui{pointer-events:none;}
+  .corner-note{
+    position:absolute;right:22px;bottom:104px;font-size:8px;letter-spacing:.2em;color:rgba(255,255,255,.28);
+    text-transform:uppercase;text-align:right;line-height:1.7;
+  }
+
+  /* ---------------- live match scoreboard ---------------- */
+  #score{
+    position:absolute;left:22px;top:88px;
+    display:flex;align-items:stretch;pointer-events:none;
+    background:rgba(8,12,17,.74);border:1px solid rgba(255,255,255,.14);
+    border-radius:10px;overflow:hidden;backdrop-filter:blur(10px);
+    box-shadow:0 10px 30px rgba(0,0,0,.45);
+    transition:opacity .4s;
+  }
+  #score .sb-side{display:flex;align-items:center;gap:8px;padding:7px 12px;}
+  #score .sb-side b{font-size:10px;letter-spacing:.12em;color:#0a1220;background:var(--yellow);padding:3px 6px;border-radius:4px;}
+  #score .sb-side.right b{background:#6e1b2a;color:#fff;}
+  #score .sb-side span{font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);}
+  #score .sb-mid{padding:6px 16px;text-align:center;background:rgba(255,255,255,.045);min-width:108px;}
+  #score .sb-score{font-size:16px;font-weight:700;letter-spacing:.06em;color:#fff;line-height:1.15;font-variant-numeric:tabular-nums;}
+  #score .sb-clock{font-size:8px;letter-spacing:.22em;color:var(--yellow);margin-top:2px;font-variant-numeric:tabular-nums;}
+  #score.goal .sb-mid{background:rgba(255,210,31,.94);}
+  #score.goal .sb-score,#score.goal .sb-clock{color:#0a1220;}
+  #score.ft .sb-clock{color:#8fd4ff;}
+  @media (max-width: 1250px){
+    #score .sb-side span{display:none;}
+    #score .sb-side{padding:6px 9px;}
+  }
+  @media (max-width: 900px){
+    #score{top:62px;left:12px;}
+    #score .sb-side span{display:none;}
+    #score .sb-side{padding:6px 8px;}
+    #score .sb-mid{min-width:86px;padding:5px 10px;}
+    #score .sb-score{font-size:14px;}
+  }
+
+  @media (max-width: 900px){
+    #telemetry,#mapPanel,#compass,.corner-note,#viewPanel,#hint{display:none;}
+    #touchpad{bottom:186px;right:12px;grid-template-columns:repeat(3,42px);grid-template-rows:repeat(3,42px);gap:5px;}
+    #toast{bottom:150px;font-size:8.5px;max-width:86vw;}
+    .toggles .tgl{font-size:8px;padding:7px 8px;letter-spacing:.08em;}
+    .group.time{flex-wrap:wrap;gap:8px;}
+    #timeSlider{order:2;flex:1 1 100%;}
+    #timeLabel{order:1;}
+    .presets{order:3;}
+    #dock{padding:8px 10px 10px;gap:6px;}
+    .topbar{padding:10px 12px 0;}
+    .brand h1{font-size:11.5px;letter-spacing:.14em;}
+    .brand p{font-size:8px;letter-spacing:.18em;}
+    .brand .crest{width:36px;height:36px;border-radius:9px;}
+    nav.modes button{padding:8px 11px;font-size:9px;letter-spacing:.12em;}
+    .topbar{padding:12px 14px 0;}
+    #dock{padding:10px 12px 12px;gap:8px;}
+    .time{flex:1 1 100%;min-width:0;}
+    .presets button{padding:5px 7px;}
+    #hint{display:none;}
+    .group{padding:8px 10px;}
+    .tgl{font-size:8px;padding:7px 8px;}
+    .act{width:32px;height:32px;}
+  }
+  @media (max-width: 560px){
+    .brand p{display:none;}
+    .tgl .lbl{font-size:8px;}
+  }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="vignette"></div>
+
+<div id="ui">
+  <header class="topbar">
+    <div class="brand">
+      <div class="crest">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffd21f" stroke-width="1.4">
+          <ellipse cx="12" cy="12" rx="10" ry="7"/>
+          <ellipse cx="12" cy="12" rx="6.4" ry="4.2"/>
+          <rect x="8.2" y="9.8" width="7.6" height="4.4" rx=".6" fill="#ffd21f" stroke="none" opacity=".9"/>
+        </svg>
+      </div>
+      <div>
+        <h1>Jawaharlal Nehru Stadium</h1>
+        <p>Kaloor · Kochi · Kerala <span class="live"><i></i>Interactive 3D drone simulation</span></p>
+      </div>
+    </div>
+
+    <div class="topright">
+    <nav class="modes">
+      <button data-mode="drone" class="on">Drone</button>
+      <button data-mode="orbit">Orbit</button>
+      <button data-mode="tour">Tour</button>
+    </nav>
+    <div id="viewPanel">
+      <div class="vp-title">Viewpoints</div>
+      <div class="vbtn-row">
+        <button data-view="drone">Drone</button>
+        <button data-view="aerial">Aerial</button>
+        <button data-view="roof">Roof</button>
+        <button data-view="pitch">Pitch</button>
+        <button data-view="stand">Stand</button>
+        <button data-view="kaloor">Kaloor</button>
+      </div>
+    </div>
+    </div>
+  </header>
+
+  <div id="score">
+    <div class="sb-side"><b>KBFC</b><span>Kerala Blasters</span></div>
+    <div class="sb-mid"><div class="sb-score">0 – 0</div><div class="sb-clock">00:00</div></div>
+    <div class="sb-side right"><b>MBSG</b><span>Mohun Bagan SG</span></div>
+  </div>
+
+  <div id="compass"><canvas id="compassCanvas" width="720" height="68"></canvas></div>
+
+  <div id="telemetry">
+    <div class="tele"><div class="k">Altitude</div><div class="v"><span id="tAlt">0</span><small>M</small></div><div class="bar"><i id="tAltBar"></i></div></div>
+    <div class="tele"><div class="k">Speed</div><div class="v"><span id="tSpd">0</span><small>M/S</small></div><div class="bar"><i id="tSpdBar"></i></div></div>
+    <div class="tele"><div class="k">Heading</div><div class="v"><span id="tHdg">000</span><small>°</small></div></div>
+  </div>
+
+  <aside id="mapPanel">
+    <canvas id="minimap" width="372" height="280"></canvas>
+    <div class="maprow"><b>Kaloor · Top View</b><span id="mapCoord">0 / 0</span></div>
+  </aside>
+
+  <div id="hint">
+    <span>MOVE</span><b>W A S D</b><span>LOOK</span><b>DRAG</b><span>ALTITUDE</span><b>SPACE / C</b><span>BOOST</span><b>SHIFT</b><span>UI</span><b>H</b>
+  </div>
+  <div id="toast"></div>
+  <div id="shotLabel"></div>
+
+  <div id="touchpad">
+    <button class="tpad-up" data-key="KeyW">▲</button>
+    <button class="tpad-left" data-key="KeyA">◀</button>
+    <button class="tpad-right" data-key="KeyD">▶</button>
+    <button class="tpad-down" data-key="KeyS">▼</button>
+    <button class="tpad-rise" data-key="Space">↑</button>
+    <button class="tpad-sink" data-key="KeyC">↓</button>
+  </div>
+
+  <footer id="dock">
+    <div class="group time">
+      <label>Sky</label>
+      <input id="timeSlider" type="range" min="15" max="22" step="0.01" value="17.25" />
+      <span id="timeLabel">17:15</span>
+      <div class="presets">
+        <button data-hour="15.2">Day</button>
+        <button data-hour="17.85" class="on">Sunset</button>
+        <button data-hour="20.4">Night</button>
+      </div>
+    </div>
+
+    <div class="group toggles">
+      <button class="tgl on" id="tCrowd"><i class="led"></i><span class="lbl">Crowd</span></button>
+      <button class="tgl on" id="tMatch"><i class="led"></i><span class="lbl">Match</span></button>
+      <button class="tgl" id="tSound"><i class="led"></i><span class="lbl">Sound</span></button>
+      <button class="tgl on" id="tGfx"><i class="led"></i><span class="lbl">HD</span></button>
+    </div>
+
+    <div class="group actions">
+      <button class="act" id="bReset" title="Reset camera (R)">
+        <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+      </button>
+      <button class="act" id="bShot" title="Save screenshot">
+        <svg viewBox="0 0 24 24"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13.5" r="3.2"/></svg>
+      </button>
+      <button class="act" id="bFull" title="Fullscreen">
+        <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 15v5h-5M15 4h5v5M9 20H4v-5"/></svg>
+      </button>
+      <button class="act" id="bInfo" title="About this simulation">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.6" r=".9" fill="currentColor" stroke="none"/></svg>
+      </button>
+      <button class="act" id="bHud" title="Hide UI (H)">
+        <svg viewBox="0 0 24 24"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></svg>
+      </button>
+    </div>
+  </footer>
+
+  <div id="infoPanel" class="hidden">
+    <button id="infoClose" aria-label="Close">✕</button>
+    <h3>About this simulation</h3>
+    <p>A real-time, browser-native reconstruction of the <b>Jawaharlal Nehru International Stadium, Kaloor, Kochi</b> — home of Kerala Blasters and the 2017 FIFA U-17 World Cup final.</p>
+    <h4>Modelled from the real ground &amp; map data</h4>
+    <ul>
+      <li>Two-tier oval bowl with 24 seating bays and the scalloped PTFE membrane roof</li>
+      <li><b>Kaloor surroundings traced from OpenStreetMap</b>: Stadium Road, Stadium Round, Stadium Link Road, the Old NH 47, Thevara–Perandoor canal, 798 real buildings, 1 317 road segments, the Kochi Metro viaduct and the three real metro stations</li>
+      <li>FIFA-standard 105 × 68 m pitch, goals, LED boards, dugouts and the west-end big screen</li>
+      <li><b>Manjappada</b> in the yellow wall — Malayalam banners (മഞ്ഞപ്പട · എന്നും യെല്ലോ), surfer flags and 12 000 supporters</li>
+    </ul>
+    <h4>The match</h4>
+    <ul>
+      <li>Kerala Blasters in the real yellow home kit by <b>Reyaur</b> — Medhaa on the chest, Batery on the back, Polycab on the right sleeve, Salpido on the left, Manjappada on the collar</li>
+      <li>Full 11-a-side simulation against <b>Mohun Bagan Super Giant</b>, with passing, dribbling, tackles, saves, throw-ins and goals</li>
+      <li>ISL branding on the sleeves, the LED perimeter and the big screen — final score: Kerala Blasters win</li>
+    </ul>
+    <h4>Controls</h4>
+    <ul class="keys">
+      <li><b>W A S D</b> fly · <b>Space / C</b> climb &amp; descend · <b>Shift</b> boost</li>
+      <li><b>Drag</b> to look around (mouse or touch) · <b>Scroll</b> zoom (FOV)</li>
+      <li><b>1 / 2 / 3</b> drone · orbit · cinematic tour · <b>R</b> reset · <b>H</b> hide UI</li>
+      <li><b>N</b> toggles night lighting · viewpoint chips for instant shots</li>
+    </ul>
+    <h4>Built with</h4>
+    <p class="small">three.js r149 (bundled, fully offline) · procedural canvas textures · embedded Noto Sans Malayalam &amp; Oswald · real OSM geometry · no external assets, no network calls.</p>
+  </div>
+
+  <div class="corner-note">
+    Jawaharlal Nehru International Stadium<br>
+    Kaloor, Kochi · Capacity 40,000 · Opened 1996
+  </div>
+
+  <div id="loader">
+    <div class="loadmark"><div class="ring"></div><div class="ring"></div><span>JLN</span></div>
+    <h2>Kaloor Stadium</h2>
+    <div class="sub">Kochi · Kerala · 9.9974° N 76.3018° E</div>
+    <div class="loadbar"><i id="loadBar"></i></div>
+    <div id="loadStep">Initialising</div>
+  </div>
+</div>
+
+<!--SCRIPTS-->
+</body>
+</html>

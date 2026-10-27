@@ -1,0 +1,13 @@
+[out:json][timeout:90];
+(
+  way["highway"](around:1500,9.9974,76.3018);
+  way["building"](around:900,9.9974,76.3018);
+  way["leisure"](around:1400,9.9974,76.3018);
+  way["waterway"](around:1400,9.9974,76.3018);
+  way["natural"="water"](around:1400,9.9974,76.3018);
+  way["landuse"](around:1400,9.9974,76.3018);
+  way["railway"](around:1600,9.9974,76.3018);
+  node["railway"="station"](around:1600,9.9974,76.3018);
+  node["amenity"](around:900,9.9974,76.3018);
+);
+out geom;

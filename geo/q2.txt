@@ -1,0 +1,9 @@
+[out:json][timeout:180];
+(
+  way["building"](around:2300,9.9974,76.3018);
+  way["landuse"](around:2300,9.9974,76.3018);
+  way["leisure"](around:2300,9.9974,76.3018);
+  way["natural"="water"](around:2300,9.9974,76.3018);
+  way["railway"](around:2300,9.9974,76.3018);
+);
+out geom;
